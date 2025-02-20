@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
+	"runtime"
 
 	"github.com/libp2p/go-libp2p/core/crypto"
 )
@@ -44,4 +46,16 @@ func readNodeInfoFromFile(fileName string) (*NodeInfo, error) {
 	nodeinfo := NewNodeInfo(libp2pPrivKey)
 
 	return nodeinfo, nil
+}
+
+func ClearScreen() {
+	if runtime.GOOS == "windows" {
+		cmd := exec.Command("cmd", "/c", "cls")
+		cmd.Stdout = os.Stdout
+		cmd.Run()
+	} else {
+		cmd := exec.Command("clear")
+		cmd.Stdout = os.Stdout
+		cmd.Run()
+	}
 }

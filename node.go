@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/libp2p/go-libp2p"
@@ -26,8 +28,10 @@ type NodeInfo struct {
 }
 
 type Node struct {
-	BootstrapPeers []peer.AddrInfo
 	host.Host
+	BootstrapPeers []peer.AddrInfo
+	ActiveStreams  map[peer.ID]network.Stream
+	streamLock     sync.Mutex
 }
 
 func NewNodeInfo(
@@ -92,23 +96,30 @@ func NewNode(ctx context.Context) *Node {
 		bootstrapPeers[i] = *peerInfo
 	}
 
-	node := &Node{Host: p2pHost, BootstrapPeers: bootstrapPeers}
+	node := &Node{Host: p2pHost, BootstrapPeers: bootstrapPeers, ActiveStreams: make(map[peer.ID]network.Stream)}
 
 	node.Host.SetStreamHandler("/bobaklabs/1.0.0", func(s network.Stream) {
-		defer s.Close()
-		fmt.Println("📞 New stream from:", s.Conn().RemotePeer())
+		log.Println("📞 New stream from:", s.Conn().RemotePeer())
 
-		scanner := bufio.NewScanner(s)
-		for scanner.Scan() {
-			msg := scanner.Text()
-			fmt.Println("📩 Received:", msg)
-			_, _ = s.Write([]byte("ACK: " + msg + "\n")) // Send acknowledgment
-		}
+		buf := bufio.NewReader(s)
+		for {
+			line, err := buf.ReadString('\n')
+			if err != nil {
+				log.Println("❌ Stream closed:", s.Conn().RemotePeer(), err)
+				s.Close()
+				return
+			}
 
-		if err := scanner.Err(); err != nil {
-			fmt.Println("Error reading from stream:", err)
+			splitted := strings.Split(line, ":")[0]
+			if splitted == "KEEPALIVE" {
+				log.Println("🔄 Received keepalive from", s.Conn().RemotePeer())
+			}
+
+			log.Println("📩 Received message:", line)
 		}
 	})
+
+	go node.sendKeepalive(10 * time.Second)
 
 	return node
 }
@@ -129,16 +140,16 @@ func (node *Node) DiscoverNodes(ctx context.Context) error {
 		return nil
 	}
 
-	time.Sleep(5 * time.Second) // Give DHT time to stabilize
+	// time.Sleep(5 * time.Second) // Give DHT time to stabilize
 
 	log.Println("🌍 Node started with ID:", node.Host.ID())
 	log.Println("📡 Listening on:", node.Host.Addrs())
 
-	rendezvousString := "bobaklabs-rendezvous"
+	rendezvousString := "0f703752914b0f2f999eb960fc3d86c5aa88a97aaf0d75fc1b15edb612eac637dd4d413716fec62218c02fe98342a567d4f0e24635090ad074c5f15fb552fa9d"
 
 	routingDiscovery := routing.NewRoutingDiscovery(kademliaDHT)
 	dutil.Advertise(ctx, routingDiscovery, rendezvousString)
-	time.Sleep(3 * time.Second) // Wait for discovery to propagate
+	// time.Sleep(3 * time.Second) // Wait for discovery to propagate
 
 	go node.continuousFindPeers(ctx, *routingDiscovery, rendezvousString)
 
@@ -154,7 +165,7 @@ func (node *Node) continuousFindPeers(ctx context.Context, routingDiscovery rout
 	for {
 		select {
 		case <-ticker.C:
-			log.Println("🔄 Searching for new peers...")
+			// log.Println("🔄 Searching for new peers...")
 			node.findPeers(ctx, routingDiscovery, rendezvousString) // Keep discovering peers
 		case <-ctx.Done():
 			log.Println("🛑 Stopping peer discovery")
@@ -176,7 +187,9 @@ func (node *Node) findPeers(ctx context.Context, routingDiscovery routing.Routin
 			continue
 		}
 
-		log.Println("🔍 Found peer:", peerInfo.ID)
+		log.Printf("🌐 Connected peers: %d", len(node.Host.Network().Peers()))
+
+		// log.Println("🔍 Found peer:", peerInfo.ID)
 		// log.Println("🛜 Addresses:", peerInfo.Addrs)
 
 		if len(peerInfo.Addrs) == 0 {
@@ -188,14 +201,19 @@ func (node *Node) findPeers(ctx context.Context, routingDiscovery routing.Routin
 			// log.Println("⚠️ Could not connect to peer:", err)
 			continue
 		}
-		log.Println("✅ Connected to peer:", peerInfo.ID)
 	}
 
 	return nil
 }
 
 func (node *Node) connectToPeer(ctx context.Context, peerInfo peer.AddrInfo) error {
-	fmt.Println("trying to connect to peer", peerInfo.ID)
+	// fmt.Println("trying to connect to peer", peerInfo.ID)
+
+	// fmt.Println("bbbebbebebebebeberb", node.Peerstore().PeerInfo(peerInfo.ID).ID.String())
+	if node.Network().Connectedness(peerInfo.ID) == network.Connected {
+		// log.Println("🔄 Already connected to", peerInfo.ID)
+		return nil
+	}
 
 	// Context for connection AND stream
 	connectCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
@@ -206,30 +224,50 @@ func (node *Node) connectToPeer(ctx context.Context, peerInfo peer.AddrInfo) err
 		return fmt.Errorf("could not connect: %w", err)
 	}
 
-	fmt.Println("opening stream", peerInfo.ID)
+	time.Sleep(500 * time.Millisecond)
+
+	// fmt.Println("opening stream", peerInfo.ID)
 	stream, err := node.Host.NewStream(connectCtx, peerInfo.ID, "/bobaklabs/1.0.0")
 	if err != nil {
 		return fmt.Errorf("stream open failed: %w", err)
 	}
-	defer stream.Close()
+	log.Println("📡 Opened stream to peer:", peerInfo.ID)
 
-	fmt.Println("sending hello msg", peerInfo.ID)
-	err = sendMessage(stream, fmt.Sprintf("NEW_PEER:%s", node.Host.ID()))
-	if err != nil {
-		return fmt.Errorf("send message failed: %w", err)
-	}
+	node.streamLock.Lock()
+	node.ActiveStreams[peerInfo.ID] = stream
+	node.streamLock.Unlock()
 
-	fmt.Println("reading responses", peerInfo.ID)
-	scanner := bufio.NewScanner(stream)
-	if scanner.Scan() {
-		log.Println("📩 Received response:", scanner.Text())
-	} else if err := scanner.Err(); err != nil {
-		log.Println("Scanner error:", err)
-	}
+	log.Println("✅ Connected to peer:", peerInfo.ID)
 
 	return nil
 }
 
+func (node *Node) sendKeepalive(interval time.Duration) {
+
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		<-ticker.C
+		// log.Println("🔄 Searching for new peers...")
+		node.streamLock.Lock()
+		log.Println("📡 Active streams:", len(node.ActiveStreams))
+		for peerID, stream := range node.ActiveStreams {
+			// log.Println("📡 Trying to send to:", peerID)
+			if err := sendMessage(stream, fmt.Sprintf("KEEPALIVE:%s", peerID)); err != nil {
+				log.Println("❌ Error sending keepalive to", peerID, ":", err)
+				stream.Close()
+				delete(node.ActiveStreams, peerID)
+			} else {
+				log.Println(" Sent keepalive to", peerID)
+			}
+		}
+		node.streamLock.Unlock()
+	}
+
+	// fmt.Println("sending hello msg", peerInfo.ID)
+
+}
 func sendMessage(s network.Stream, message string) error {
 	_, err := s.Write([]byte(message + "\n")) // Ensure messages are newline-delimited
 	if err != nil {
