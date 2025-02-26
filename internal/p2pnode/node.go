@@ -1,4 +1,4 @@
-package main
+package p2pnode
 
 import (
 	"bufio"
@@ -17,10 +17,15 @@ import (
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/libp2p/go-libp2p/p2p/discovery/routing"
 	dutil "github.com/libp2p/go-libp2p/p2p/discovery/util"
 	"github.com/multiformats/go-multiaddr"
 )
+
+var CUSTOM_PEERS = []string{
+	"/ip4/192.168.1.99/tcp/4001/p2p/12D3KooWHibd34BCwVxW5m5ZjLCveDrxjenMEXYfQQZPsEN7Cpqu",
+}
 
 type NodeInfo struct {
 	Privkey crypto.PrivKey `json:"priv_key"`
@@ -29,13 +34,14 @@ type NodeInfo struct {
 
 type Node struct {
 	host.Host
-	BootstrapPeers []peer.AddrInfo
-	ActiveStreams  map[peer.ID]network.Stream
-	streamLock     sync.Mutex
+	BootstrapPeers   []peer.AddrInfo
+	ActiveStreams    map[peer.ID]network.Stream
+	streamLock       sync.Mutex
+	protocolID       protocol.ID
+	rendezvousString string
 }
 
-func NewNodeInfo(
-	Privkey crypto.PrivKey) *NodeInfo {
+func NewNodeInfo(Privkey crypto.PrivKey) *NodeInfo {
 
 	Pubkey := Privkey.GetPublic()
 	return &NodeInfo{
@@ -44,37 +50,22 @@ func NewNodeInfo(
 	}
 }
 
-func NewNode(ctx context.Context) *Node {
-	var nodeInfo NodeInfo
+func NewNode(ctx context.Context, rendezvousStr, protocolID, bootstrapMode string) (*Node, error) {
 	keyFileName := "node_key.pem"
 
-	if _, err := os.Stat(keyFileName); errors.Is(err, os.ErrNotExist) {
-		privkey, _, err := crypto.GenerateKeyPair(crypto.Ed25519, -1)
-		if err != nil {
-			log.Printf("Failed to generate key pair: %v\n", err)
-			return nil
-		}
+	protoID := protocol.ID(protocolID)
 
-		nodeinfo := NewNodeInfo(privkey)
-
-		if err := savePrivKey(*nodeinfo, keyFileName); err != nil {
-			log.Println("err serializing node:", err)
-			return nil
-		}
-
-		nodeInfo = *nodeinfo
-
-	} else {
-		nodeinfo, err := readNodeInfoFromFile(keyFileName)
-		if err != nil {
-			log.Println("err reading node from file", err)
-			return nil
-		}
-
-		nodeInfo = *nodeinfo
+	nodeInfo, err := CreateNodeIdentity(keyFileName)
+	if err != nil {
+		log.Println(err)
+		return nil, err
 	}
 
 	p2pHost, err := libp2p.New(
+		libp2p.EnableNATService(),
+		libp2p.EnableHolePunching(),
+		libp2p.EnableRelay(),
+		libp2p.EnableRelayService(),
 		libp2p.Identity(nodeInfo.Privkey),
 		libp2p.DefaultSecurity,
 		libp2p.DefaultTransports,
@@ -84,21 +75,27 @@ func NewNode(ctx context.Context) *Node {
 	)
 	if err != nil {
 		log.Println("err creating p2p host:", err)
-		return nil
+		return nil, err
 	}
 
-	bootstrapPeers := make([]peer.AddrInfo, len(dht.DefaultBootstrapPeers))
-	// fmt.Println(bootstrapPeers)
-	for i, addr := range dht.DefaultBootstrapPeers {
-		multiAddr, _ := multiaddr.NewMultiaddr(addr.String())
-		// fmt.Println(multiAddr)
-		peerInfo, _ := peer.AddrInfoFromP2pAddr(multiAddr)
-		bootstrapPeers[i] = *peerInfo
+	var bootstrapPeers []peer.AddrInfo
+
+	if bootstrapMode == "libp2p-default" {
+		bootstrapPeers = getDefaultBootstrapPeers()
+	} else if bootstrapMode == "custom" {
+		bootstrapPeers = getCustomPeers()
 	}
 
-	node := &Node{Host: p2pHost, BootstrapPeers: bootstrapPeers, ActiveStreams: make(map[peer.ID]network.Stream)}
+	fmt.Println(bootstrapPeers)
 
-	node.Host.SetStreamHandler("/bobaklabs/1.0.0", func(s network.Stream) {
+	node := &Node{Host: p2pHost,
+		BootstrapPeers:   bootstrapPeers,
+		ActiveStreams:    make(map[peer.ID]network.Stream),
+		protocolID:       protoID,
+		rendezvousString: rendezvousStr,
+	}
+
+	node.Host.SetStreamHandler(protoID, func(s network.Stream) {
 		log.Println("📞 New stream from:", s.Conn().RemotePeer())
 
 		buf := bufio.NewReader(s)
@@ -121,7 +118,61 @@ func NewNode(ctx context.Context) *Node {
 
 	go node.sendKeepalive(10 * time.Second)
 
-	return node
+	return node, nil
+}
+
+func getDefaultBootstrapPeers() []peer.AddrInfo {
+	bootstrapPeers := make([]peer.AddrInfo, len(dht.DefaultBootstrapPeers))
+	// fmt.Println(bootstrapPeers)
+	for i, addr := range dht.DefaultBootstrapPeers {
+		multiAddr, _ := multiaddr.NewMultiaddr(addr.String())
+		// fmt.Println(multiAddr)
+		peerInfo, _ := peer.AddrInfoFromP2pAddr(multiAddr)
+		bootstrapPeers[i] = *peerInfo
+	}
+
+	return bootstrapPeers
+}
+
+func getCustomPeers() []peer.AddrInfo {
+	var addrs []peer.AddrInfo
+	for _, peeraddr := range CUSTOM_PEERS {
+		bootstrapAddr, _ := multiaddr.NewMultiaddr(peeraddr)
+		bootstrapPeer, _ := peer.AddrInfoFromP2pAddr(bootstrapAddr)
+		addrs = append(addrs, *bootstrapPeer)
+	}
+	return addrs
+}
+func CreateNodeIdentity(keyFileName string) (*NodeInfo, error) {
+	var nodeInfo *NodeInfo
+
+	if _, err := os.Stat(keyFileName); errors.Is(err, os.ErrNotExist) {
+		privkey, _, err := crypto.GenerateKeyPair(crypto.Ed25519, -1)
+		if err != nil {
+			log.Printf("Failed to generate key pair: %v\n", err)
+			return nil, err
+		}
+
+		nodeinfo := NewNodeInfo(privkey)
+
+		if err := savePrivKey(*nodeinfo, keyFileName); err != nil {
+			log.Println("err serializing node:", err)
+			return nil, err
+		}
+
+		nodeInfo = nodeinfo
+
+	} else {
+		nodeinfo, err := readNodeInfoFromFile(keyFileName)
+		if err != nil {
+			log.Println("err reading node from file", err)
+			return nil, err
+		}
+
+		nodeInfo = nodeinfo
+	}
+
+	return nodeInfo, nil
 }
 
 func (node *Node) DiscoverNodes(ctx context.Context) error {
@@ -145,7 +196,7 @@ func (node *Node) DiscoverNodes(ctx context.Context) error {
 	log.Println("🌍 Node started with ID:", node.Host.ID())
 	log.Println("📡 Listening on:", node.Host.Addrs())
 
-	rendezvousString := "0f703752914b0f2f999eb960fc3d86c5aa88a97aaf0d75fc1b15edb612eac637dd4d413716fec62218c02fe98342a567d4f0e24635090ad074c5f15fb552fa9d"
+	rendezvousString := node.rendezvousString
 
 	routingDiscovery := routing.NewRoutingDiscovery(kademliaDHT)
 	dutil.Advertise(ctx, routingDiscovery, rendezvousString)
@@ -227,7 +278,7 @@ func (node *Node) connectToPeer(ctx context.Context, peerInfo peer.AddrInfo) err
 	time.Sleep(500 * time.Millisecond)
 
 	// fmt.Println("opening stream", peerInfo.ID)
-	stream, err := node.Host.NewStream(connectCtx, peerInfo.ID, "/bobaklabs/1.0.0")
+	stream, err := node.Host.NewStream(connectCtx, peerInfo.ID, node.protocolID)
 	if err != nil {
 		return fmt.Errorf("stream open failed: %w", err)
 	}
@@ -259,7 +310,7 @@ func (node *Node) sendKeepalive(interval time.Duration) {
 				stream.Close()
 				delete(node.ActiveStreams, peerID)
 			} else {
-				log.Println(" Sent keepalive to", peerID)
+				log.Println("Sent keepalive to", peerID)
 			}
 		}
 		node.streamLock.Unlock()
@@ -268,6 +319,7 @@ func (node *Node) sendKeepalive(interval time.Duration) {
 	// fmt.Println("sending hello msg", peerInfo.ID)
 
 }
+
 func sendMessage(s network.Stream, message string) error {
 	_, err := s.Write([]byte(message + "\n")) // Ensure messages are newline-delimited
 	if err != nil {

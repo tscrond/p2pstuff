@@ -1,20 +1,11 @@
+/*
+Copyright © 2025 NAME HERE <EMAIL ADDRESS>
+
+*/
 package main
 
-import (
-	"context"
-	"fmt"
-)
+import "p2pstuff/cmd"
 
 func main() {
-	ctx := context.Background()
-
-	node := NewNode(ctx)
-
-	if node != nil {
-		fmt.Println("Node initialized with peer ID:", node.ID().String())
-	}
-
-	go node.DiscoverNodes(ctx)
-
-	select {}
+	cmd.Execute()
 }
