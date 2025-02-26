@@ -46,7 +46,7 @@ func init() {
 
 	peerCmd.PersistentFlags().String("rendezvous", "f9cbb0a0c6e5b443a27335e0efc4ff45ba89e2ece34cb5b06404125a3deda0b8", "rendezvous string")
 	peerCmd.PersistentFlags().String("proto", "/bobaklabs/1.0.0", "protocol ID")
-	peerCmd.PersistentFlags().String("bootstrap-mode", "libp2p-default", "custom peers or libp2p-provided (options: libp2p-default, custom)")
+	peerCmd.PersistentFlags().String("bootstrap-mode", "libp2p-default", "custom bootstrap nodes or libp2p-provided (options: libp2p-default, custom)")
 
 	// Here you will define your flags and configuration settings.
 
