@@ -242,16 +242,16 @@ func (node *Node) findPeers(ctx context.Context, routingDiscovery routing.Routin
 
 		log.Printf("🌐 Connected peers: %d %s", len(node.Host.Network().Peers()), node.Host.Network().Peers())
 
-		// log.Println("🔍 Found peer:", peerInfo.ID)
-		// log.Println("🛜 Addresses:", peerInfo.Addrs)
+		log.Println("🔍 Found peer:", peerInfo.ID)
+		log.Println("🛜 Addresses:", peerInfo.Addrs)
 
 		if len(peerInfo.Addrs) == 0 {
-			// log.Println("⚠️ Peer has no known addresses, skipping")
+			log.Println("⚠️ Peer has no known addresses, skipping")
 			continue
 		}
 
 		if err := node.connectToPeer(ctx, peerInfo); err != nil {
-			// log.Println("⚠️ Could not connect to peer:", err)
+			log.Println("⚠️ Could not connect to peer:", err)
 			continue
 		}
 	}
