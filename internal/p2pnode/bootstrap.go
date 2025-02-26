@@ -28,6 +28,7 @@ func NewBootstrapNode(ctx context.Context) (*BootstrapNode, error) {
 			"/ip4/0.0.0.0/tcp/4001",
 			"/ip6/::/tcp/4001",
 		),
+		libp2p.EnableRelayService(),
 		libp2p.NATPortMap(),
 		libp2p.Identity(nodeInfo.Privkey),
 	)

@@ -24,7 +24,7 @@ import (
 )
 
 var CUSTOM_PEERS = []string{
-	"/ip4/192.168.1.99/tcp/4001/p2p/12D3KooWHibd34BCwVxW5m5ZjLCveDrxjenMEXYfQQZPsEN7Cpqu",
+	"/ip4/172.104.243.60/tcp/4001/p2p/12D3KooWJYueCcyg2CWyBmLeGFNUKYBvDskVHJdYS8L9UkbV9Dnm",
 }
 
 type NodeInfo struct {
@@ -65,8 +65,10 @@ func NewNode(ctx context.Context, rendezvousStr, protocolID, bootstrapMode strin
 		libp2p.EnableNATService(),
 		libp2p.EnableHolePunching(),
 		libp2p.EnableRelay(),
+		libp2p.EnableAutoRelayWithStaticRelays(getCustomPeers()),
 		libp2p.EnableRelayService(),
 		libp2p.Identity(nodeInfo.Privkey),
+		libp2p.ForceReachabilityPrivate(),
 		libp2p.DefaultSecurity,
 		libp2p.DefaultTransports,
 		libp2p.DefaultMuxers,
@@ -238,7 +240,7 @@ func (node *Node) findPeers(ctx context.Context, routingDiscovery routing.Routin
 			continue
 		}
 
-		log.Printf("🌐 Connected peers: %d", len(node.Host.Network().Peers()))
+		log.Printf("🌐 Connected peers: %d %s", len(node.Host.Network().Peers()), node.Host.Network().Peers())
 
 		// log.Println("🔍 Found peer:", peerInfo.ID)
 		// log.Println("🛜 Addresses:", peerInfo.Addrs)
