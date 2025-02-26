@@ -1,22 +1,21 @@
-module p2pstuff
+module github.com/tscrond/p2pstuff
 
 go 1.23.3
 
 require (
-	github.com/jedib0t/go-pretty v4.3.0+incompatible
+	github.com/charmbracelet/bubbletea v1.3.3
+	github.com/charmbracelet/lipgloss v1.0.0
 	github.com/libp2p/go-libp2p v0.40.0
 	github.com/libp2p/go-libp2p-kad-dht v0.29.0
 	github.com/multiformats/go-multiaddr v0.14.0
+	github.com/spf13/cobra v1.9.1
 )
 
 require (
-	github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/benbjohnson/clock v1.3.5 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
-	github.com/charmbracelet/bubbletea v1.3.3 // indirect
-	github.com/charmbracelet/lipgloss v1.0.0 // indirect
 	github.com/charmbracelet/x/ansi v0.8.0 // indirect
 	github.com/charmbracelet/x/term v0.2.1 // indirect
 	github.com/containerd/cgroups v1.1.0 // indirect
@@ -30,8 +29,6 @@ require (
 	github.com/francoispqt/gojay v1.2.13 // indirect
 	github.com/go-logr/logr v1.4.2 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
-	github.com/go-openapi/errors v0.22.0 // indirect
-	github.com/go-openapi/strfmt v0.23.0 // indirect
 	github.com/go-task/slim-sprig/v3 v3.0.0 // indirect
 	github.com/godbus/dbus/v5 v5.1.0 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
@@ -76,7 +73,6 @@ require (
 	github.com/mikioh/tcpinfo v0.0.0-20190314235526-30a79bb1804b // indirect
 	github.com/mikioh/tcpopt v0.0.0-20190314235656-172688c1accc // indirect
 	github.com/minio/sha256-simd v1.0.1 // indirect
-	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/mr-tron/base58 v1.2.0 // indirect
 	github.com/muesli/ansi v0.0.0-20230316100256-276c6243b2f6 // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
@@ -91,7 +87,6 @@ require (
 	github.com/multiformats/go-multistream v0.6.0 // indirect
 	github.com/multiformats/go-varint v0.0.7 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
-	github.com/oklog/ulid v1.3.1 // indirect
 	github.com/onsi/ginkgo/v2 v2.22.2 // indirect
 	github.com/opencontainers/runtime-spec v1.2.0 // indirect
 	github.com/pbnjay/memory v0.0.0-20210728143218-7b4eea64cf58 // indirect
@@ -126,11 +121,9 @@ require (
 	github.com/raulk/go-watchdog v1.3.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
-	github.com/spf13/cobra v1.9.1 // indirect
 	github.com/spf13/pflag v1.0.6 // indirect
 	github.com/whyrusleeping/go-keyspace v0.0.0-20160322163242-5b898ac5add1 // indirect
 	github.com/wlynxg/anet v0.0.5 // indirect
-	go.mongodb.org/mongo-driver v1.14.0 // indirect
 	go.opencensus.io v0.24.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.1.0 // indirect
 	go.opentelemetry.io/otel v1.34.0 // indirect
