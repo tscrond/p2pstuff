@@ -30,7 +30,7 @@ func NewBootstrapNode(ctx context.Context) (*BootstrapNode, error) {
 			"/ip6/::/tcp/4001",
 		),
 		libp2p.EnableRelay(),
-		// libp2p.EnableRelayService(),
+		libp2p.EnableRelayService(),
 		// libp2p.NATPortMap(),
 		libp2p.Identity(nodeInfo.Privkey),
 		// libp2p.EnableHolePunching(), // Enables hole punching
@@ -56,6 +56,6 @@ func NewBootstrapNode(ctx context.Context) (*BootstrapNode, error) {
 		log.Println("Failed to bootstrap DHT:", err)
 		return nil, err
 	}
-	
+
 	return &BootstrapNode{Host: node}, nil
 }

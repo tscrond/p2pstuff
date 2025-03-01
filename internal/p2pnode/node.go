@@ -22,6 +22,7 @@ import (
 	"github.com/libp2p/go-libp2p/p2p/discovery/routing"
 	dutil "github.com/libp2p/go-libp2p/p2p/discovery/util"
 	"github.com/libp2p/go-libp2p/p2p/host/autonat"
+	"github.com/libp2p/go-libp2p/p2p/protocol/circuitv2/client"
 	"github.com/multiformats/go-multiaddr"
 )
 
@@ -121,30 +122,59 @@ func NewNode(ctx context.Context, rendezvousStr, protocolID, bootstrapMode strin
 		}
 	})
 
-	go node.communicateWithRelay(10 * time.Second)
 	go node.sendKeepalive(10 * time.Second)
 
 	return node, nil
 }
 
-func (node *Node) communicateWithRelay(interval time.Duration) {
+func (node *Node) findPeerAddressesThroughRelays(ctx context.Context, interval time.Duration, relayChan chan<- multiaddr.Multiaddr) {
 
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
 	for {
-		<-ticker.C
+		select {
+		case <-ctx.Done():
+			log.Println("findRelays stopped")
+			return
+		case <-ticker.C:
+			nodePeers := node.BootstrapPeers
 
-		nodePeers := node.BootstrapPeers
+			for _, p := range nodePeers {
+				for _, ad := range p.Addrs {
+					relayAddrStr := fmt.Sprintf("%s/p2p/%s", ad.Multiaddr().String(), p.ID.String())
+					relayAddr, err := multiaddr.NewMultiaddr(relayAddrStr)
+					if err != nil {
+						log.Println(err)
+						continue
+					}
+					if slices.Contains(CUSTOM_PEERS, relayAddr.String()) {
+						log.Println("Found Relay Node:", p)
 
-		for _, p := range nodePeers {
-			fmt.Println(p.String())
-			if slices.Contains(CUSTOM_PEERS, string(p.String())) {
-				fmt.Println("relay found")
+						_, err := client.Reserve(ctx, node.Host, p)
+						if err != nil {
+							log.Printf("Failed to receive a relay reservation: %v", err)
+							continue
+						}
+
+						relayStr := fmt.Sprintf("/p2p/%s/p2p-circuit/p2p/%s", p.ID.String(), node.ID().String())
+						maddr, err := multiaddr.NewMultiaddr(relayStr)
+						if err != nil {
+							log.Println("Failed to create relay multiaddr:", err)
+							continue
+						}
+						log.Println("Relay Multiaddr:", maddr)
+
+						select {
+						case relayChan <- maddr:
+							log.Println("Sent relay maddr to chan: ", maddr)
+						case <-ctx.Done():
+							return
+						}
+					}
+				}
 			}
-			// addrs := node.Peerstore().Addrs(p.ID)
 		}
-
 	}
 }
 func getDefaultBootstrapPeers() []peer.AddrInfo {
@@ -248,6 +278,23 @@ func (node *Node) DiscoverNodes(ctx context.Context) error {
 
 	go node.continuousFindPeers(ctx, *routingDiscovery, rendezvousString)
 
+	relayChan := make(chan multiaddr.Multiaddr)
+	go node.findPeerAddressesThroughRelays(ctx, 10*time.Second, relayChan)
+	go func() {
+		for {
+			select {
+			case relayAddr := <-relayChan:
+				log.Println("📡 Connecting via relay:", relayAddr)
+				peerInfo, _ := peer.AddrInfoFromP2pAddr(relayAddr)
+				if err := node.connectToPeer(ctx, *peerInfo); err != nil {
+					log.Println("⚠️ Could not connect via relay:", err)
+				}
+			case <-ctx.Done():
+				log.Println("🛑 Stopping relay connections")
+				return
+			}
+		}
+	}()
 	return nil
 
 }
@@ -339,6 +386,8 @@ func (node *Node) connectToPeer(ctx context.Context, peerInfo peer.AddrInfo) err
 
 func (node *Node) sendKeepalive(interval time.Duration) {
 
+	msgType := "KEEPALIVE"
+
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
@@ -349,7 +398,7 @@ func (node *Node) sendKeepalive(interval time.Duration) {
 		log.Println("📡 Active streams:", len(node.ActiveStreams))
 		for peerID, stream := range node.ActiveStreams {
 			// log.Println("📡 Trying to send to:", peerID)
-			if err := sendMessage(stream, fmt.Sprintf("KEEPALIVE:%s", peerID)); err != nil {
+			if err := sendMessage(stream, fmt.Sprintf("%s:%s", msgType, peerID)); err != nil {
 				log.Println("❌ Error sending keepalive to", peerID, ":", err)
 				stream.Close()
 				delete(node.ActiveStreams, peerID)
