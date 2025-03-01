@@ -45,7 +45,15 @@ jobs:
         echo "Built assets:"
         ls -lh p2pstuff-${{ github.ref_name }}-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz
 
+    - name: Check if release exists
+      id: check_release
+      run: |
+        gh release view ${{ github.ref_name }} || echo "not found"
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
     - name: Create GitHub Release
+      if: steps.check_release.outputs.result == 'not found'
       id: create_release
       uses: softprops/action-gh-release@v1
       with:
