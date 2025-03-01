@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -20,6 +21,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/libp2p/go-libp2p/p2p/discovery/routing"
 	dutil "github.com/libp2p/go-libp2p/p2p/discovery/util"
+	"github.com/libp2p/go-libp2p/p2p/host/autonat"
 	"github.com/multiformats/go-multiaddr"
 )
 
@@ -62,11 +64,11 @@ func NewNode(ctx context.Context, rendezvousStr, protocolID, bootstrapMode strin
 	}
 
 	p2pHost, err := libp2p.New(
-		libp2p.EnableNATService(),
-		libp2p.EnableHolePunching(),
+		// libp2p.EnableNATService(),
+		// libp2p.EnableHolePunching(),
 		libp2p.EnableRelay(),
-		libp2p.EnableAutoRelayWithStaticRelays(getCustomPeers()),
-		libp2p.EnableRelayService(),
+		// libp2p.EnableAutoRelayWithStaticRelays(getCustomPeers()),
+		// libp2p.EnableRelayService(),
 		libp2p.Identity(nodeInfo.Privkey),
 		libp2p.ForceReachabilityPrivate(),
 		libp2p.DefaultSecurity,
@@ -75,6 +77,7 @@ func NewNode(ctx context.Context, rendezvousStr, protocolID, bootstrapMode strin
 		libp2p.DefaultPeerstore,
 		libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/0"),
 	)
+
 	if err != nil {
 		log.Println("err creating p2p host:", err)
 		return nil, err
@@ -118,11 +121,32 @@ func NewNode(ctx context.Context, rendezvousStr, protocolID, bootstrapMode strin
 		}
 	})
 
+	go node.communicateWithRelay(10 * time.Second)
 	go node.sendKeepalive(10 * time.Second)
 
 	return node, nil
 }
 
+func (node *Node) communicateWithRelay(interval time.Duration) {
+
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		<-ticker.C
+
+		nodePeers := node.BootstrapPeers
+
+		for _, p := range nodePeers {
+			fmt.Println(p.String())
+			if slices.Contains(CUSTOM_PEERS, string(p.String())) {
+				fmt.Println("relay found")
+			}
+			// addrs := node.Peerstore().Addrs(p.ID)
+		}
+
+	}
+}
 func getDefaultBootstrapPeers() []peer.AddrInfo {
 	bootstrapPeers := make([]peer.AddrInfo, len(dht.DefaultBootstrapPeers))
 	// fmt.Println(bootstrapPeers)
@@ -187,11 +211,29 @@ func (node *Node) DiscoverNodes(ctx context.Context) error {
 		return nil
 	}
 
+	// Enable AutoNAT for NAT detection
+	autoNat, err := autonat.New(node.Host)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+
+	fmt.Println(autoNat.Status())
+
 	fmt.Println("🌍 Bootstrapping the DHT")
 	if err := kademliaDHT.Bootstrap(ctx); err != nil {
 		log.Println(err)
 		return nil
 	}
+
+	// If behind NAT, use circuit relay
+	// if autoNat.Status() == autonat. {
+	// 	fmt.Println("Behind NAT, using Circuit Relay...")
+	// 	_, err = client.New(ctx, h)
+	// 	if err != nil {
+	// 		log.Fatal("Failed to enable circuit relay:", err)
+	// 	}
+	// }
 
 	// time.Sleep(5 * time.Second) // Give DHT time to stabilize
 

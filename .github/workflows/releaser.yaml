@@ -1,0 +1,62 @@
+name: Go Build and Release
+
+on:
+  push:
+    tags:
+      - '*'  # Triggers on all tag pushes
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    strategy:
+      matrix: 
+        platform:
+          - "darwin"
+          - "linux"
+          - "windows"
+        arch:
+          - "arm64"
+          - "amd64"
+
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v3
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.23'
+
+    
+    - name: Build Go Project
+      run: |
+        GOOS=${{ matrix.platform }} GOARCH=${{ matrix.arch }} go build -o ./p2pstuff
+    
+    - name: Prepare Release Assets
+      run: |
+        mkdir -p release
+        cp ./p2pstuff ./release/
+        tar -czvf p2pstuff-${{ github.ref_name }}-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz -C release .
+        echo "Built assets:"
+        ls -lh p2pstuff-${{ github.ref_name }}-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz
+
+    - name: Create GitHub Release
+      id: create_release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: ./p2pstuff-${{ github.ref_name }}-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Upload Release Assets
+      if: success() && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: ./p2pstuff-${{ github.ref_name }}-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
