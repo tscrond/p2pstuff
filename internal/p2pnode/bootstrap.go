@@ -3,6 +3,7 @@ package p2pnode
 import (
 	"context"
 	"log"
+	"time"
 
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 
@@ -61,4 +62,28 @@ func NewBootstrapNode(ctx context.Context) (*BootstrapNode, error) {
 	}
 
 	return &BootstrapNode{Host: node}, nil
+}
+
+func (node *BootstrapNode) ShowPeers(elapsed time.Duration) {
+	ctx := context.Background()
+
+	ticker := time.NewTicker(elapsed)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			for _, p := range node.Peerstore().Peers() {
+				addrs := node.Peerstore().Addrs(p)
+				if len(addrs) > 0 {
+					log.Printf("Peer %s has addresses:", p)
+					for _, addr := range addrs {
+						log.Println(" -", addr)
+					}
+				}
+			}
+		case <-ctx.Done():
+			return
+		}
+	}
 }

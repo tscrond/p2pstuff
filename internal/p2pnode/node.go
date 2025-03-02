@@ -68,7 +68,7 @@ func NewNode(ctx context.Context, rendezvousStr, protocolID, bootstrapMode strin
 		// libp2p.EnableNATService(),
 		// libp2p.EnableHolePunching(),
 		libp2p.EnableRelay(),
-		// libp2p.EnableAutoRelayWithStaticRelays(getCustomPeers()),
+		libp2p.EnableAutoRelayWithStaticRelays(getCustomPeers()),
 		// libp2p.EnableRelayService(),
 		libp2p.Identity(nodeInfo.Privkey),
 		libp2p.ForceReachabilityPrivate(),
@@ -151,12 +151,18 @@ func (node *Node) findPeerAddressesThroughRelays(ctx context.Context, interval t
 					if slices.Contains(CUSTOM_PEERS, relayAddr.String()) {
 						log.Println("Found Relay Node:", p)
 
-						_, err := client.Reserve(ctx, node.Host, p)
+						res, err := client.Reserve(ctx, node.Host, p)
 						if err != nil {
 							log.Printf("Failed to receive a relay reservation: %v", err)
 							continue
 						}
 
+						fmt.Println("reservations: ", res)
+
+						if p.ID == node.ID() {
+							log.Println("⚠️ Skipping self as relay")
+							continue
+						}
 						relayStr := fmt.Sprintf("/p2p/%s/p2p-circuit/p2p/%s", p.ID.String(), node.ID().String())
 						maddr, err := multiaddr.NewMultiaddr(relayStr)
 						if err != nil {

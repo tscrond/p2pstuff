@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/tscrond/p2pstuff/internal/p2pnode"
 
@@ -35,6 +36,8 @@ var bootstrapCmd = &cobra.Command{
 		for _, addr := range bnode.Addrs() {
 			log.Printf("  %s/p2p/%s\n", addr, bnode.ID())
 		}
+
+		go bnode.ShowPeers(10 * time.Second)
 
 		select {}
 	},
