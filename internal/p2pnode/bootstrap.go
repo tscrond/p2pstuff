@@ -29,7 +29,6 @@ func NewBootstrapNode(ctx context.Context) (*BootstrapNode, error) {
 			"/ip4/0.0.0.0/tcp/4001",
 			"/ip6/::/tcp/4001",
 		),
-		libp2p.EnableRelay(),
 		libp2p.EnableRelayService(),
 		// libp2p.NATPortMap(),
 		libp2p.Identity(nodeInfo.Privkey),
@@ -41,7 +40,7 @@ func NewBootstrapNode(ctx context.Context) (*BootstrapNode, error) {
 	}
 
 	// Enable Circuit Relay v2 (Bootstrap acts as relay for NATed peers)
-	_, err = relay.New(node)
+	_, err = relay.New(node, relay.WithResources(relay.DefaultResources()))
 	if err != nil {
 		log.Fatal("Failed to start relay:", err)
 	}
@@ -54,6 +53,10 @@ func NewBootstrapNode(ctx context.Context) (*BootstrapNode, error) {
 
 	if err := kadDht.Bootstrap(ctx); err != nil {
 		log.Println("Failed to bootstrap DHT:", err)
+		log.Println("Retrying DHT bootstrap...")
+		if err := kadDht.Bootstrap(ctx); err != nil {
+			log.Fatal("Failed to bootstrap DHT after retry:", err)
+		}
 		return nil, err
 	}
 

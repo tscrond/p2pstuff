@@ -28,8 +28,12 @@ var bootstrapCmd = &cobra.Command{
 		fmt.Println("Bootstrap node started!")
 		fmt.Println("Peer ID:", bnode.ID())
 
+		// for _, addr := range bnode.Addrs() {
+		// 	fmt.Println("Listening on:", addr)
+		// }
+		log.Println("Relay Node Started. Listening on:")
 		for _, addr := range bnode.Addrs() {
-			fmt.Println("Listening on:", addr)
+			log.Printf("  %s/p2p/%s\n", addr, bnode.ID())
 		}
 
 		select {}
