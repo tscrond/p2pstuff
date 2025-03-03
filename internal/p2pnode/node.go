@@ -159,6 +159,10 @@ func (node *Node) findPeerAddressesThroughRelays(ctx context.Context, interval t
 
 						fmt.Println("reservations: ", res)
 
+						rPeers := node.getRelayedPeers(ctx, node.BootstrapPeers)
+						fmt.Println(rPeers)
+
+						continue
 						if p.ID == node.ID() {
 							log.Println("⚠️ Skipping self as relay")
 							continue
@@ -183,6 +187,30 @@ func (node *Node) findPeerAddressesThroughRelays(ctx context.Context, interval t
 		}
 	}
 }
+
+func (node *Node) getRelayedPeers(ctx context.Context, bootstrapPeers []peer.AddrInfo) []peer.AddrInfo {
+
+	peerInfo := []peer.AddrInfo{}
+	for _, b := range bootstrapPeers {
+		stream, err := node.NewStream(ctx, b.ID, "/relay/peers")
+		if err != nil {
+			log.Println(err)
+			return nil
+		}
+
+		reader := bufio.NewReader(stream)
+		for {
+			line, err := reader.ReadString('\n')
+			if err != nil {
+				break
+			}
+			log.Println("Received peer info:", line)
+		}
+	}
+
+	return peerInfo
+}
+
 func getDefaultBootstrapPeers() []peer.AddrInfo {
 	bootstrapPeers := make([]peer.AddrInfo, len(dht.DefaultBootstrapPeers))
 	// fmt.Println(bootstrapPeers)

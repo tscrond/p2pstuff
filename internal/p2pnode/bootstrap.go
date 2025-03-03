@@ -1,7 +1,9 @@
 package p2pnode
 
 import (
+	"bufio"
 	"context"
+	"fmt"
 	"log"
 	"time"
 
@@ -9,6 +11,7 @@ import (
 
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/host"
+	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/p2p/protocol/circuitv2/relay"
 )
 
@@ -35,6 +38,21 @@ func NewBootstrapNode(ctx context.Context) (*BootstrapNode, error) {
 		libp2p.Identity(nodeInfo.Privkey),
 		// libp2p.EnableHolePunching(), // Enables hole punching
 	)
+
+	node.SetStreamHandler("/relay/peers", func(s network.Stream) {
+		defer s.Close()
+		writer := bufio.NewWriter(s)
+
+		// Retrieve all known peers
+		for _, p := range node.Peerstore().Peers() {
+			addrs := node.Peerstore().Addrs(p)
+			for _, addr := range addrs {
+				writer.WriteString(fmt.Sprintf("%s - %s\n", p.String(), addr.String()))
+			}
+		}
+		writer.Flush()
+	})
+
 	if err != nil {
 		log.Fatal("Failed to create host:", err)
 		return nil, err
@@ -76,6 +94,7 @@ func (node *BootstrapNode) ShowPeers(elapsed time.Duration) {
 			for _, p := range node.Peerstore().Peers() {
 				addrs := node.Peerstore().Addrs(p)
 				if len(addrs) > 0 {
+					log.Println("")
 					log.Printf("Peer %s has addresses:", p)
 					for _, addr := range addrs {
 						log.Println(" -", addr)
@@ -86,4 +105,8 @@ func (node *BootstrapNode) ShowPeers(elapsed time.Duration) {
 			return
 		}
 	}
+}
+
+func (node *BootstrapNode) peerStreamFunc(s network.Stream) {
+
 }
