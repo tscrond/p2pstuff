@@ -3,7 +3,6 @@ package p2pnode
 import (
 	"bufio"
 	"context"
-	"fmt"
 	"log"
 	"time"
 
@@ -36,7 +35,7 @@ func NewBootstrapNode(ctx context.Context) (*BootstrapNode, error) {
 		libp2p.EnableRelayService(),
 		// libp2p.NATPortMap(),
 		libp2p.Identity(nodeInfo.Privkey),
-		// libp2p.EnableHolePunching(), // Enables hole punching
+		libp2p.EnableHolePunching(), // Enables hole punching
 	)
 
 	node.SetStreamHandler("/relay/peers", func(s network.Stream) {
@@ -45,10 +44,10 @@ func NewBootstrapNode(ctx context.Context) (*BootstrapNode, error) {
 
 		// Retrieve all known peers
 		for _, p := range node.Peerstore().Peers() {
-			addrs := node.Peerstore().Addrs(p)
-			for _, addr := range addrs {
-				writer.WriteString(fmt.Sprintf("%s - %s\n", p.String(), addr.String()))
+			if p == node.ID() {
+				continue
 			}
+			writer.WriteString(p.String())
 		}
 		writer.Flush()
 	})

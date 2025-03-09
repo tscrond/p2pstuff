@@ -162,11 +162,11 @@ func (node *Node) findPeerAddressesThroughRelays(ctx context.Context, interval t
 						rPeers := node.getRelayedPeers(ctx, node.BootstrapPeers)
 						fmt.Println(rPeers)
 
-						continue
 						if p.ID == node.ID() {
 							log.Println("⚠️ Skipping self as relay")
 							continue
 						}
+
 						relayStr := fmt.Sprintf("/p2p/%s/p2p-circuit/p2p/%s", p.ID.String(), node.ID().String())
 						maddr, err := multiaddr.NewMultiaddr(relayStr)
 						if err != nil {
@@ -188,9 +188,9 @@ func (node *Node) findPeerAddressesThroughRelays(ctx context.Context, interval t
 	}
 }
 
-func (node *Node) getRelayedPeers(ctx context.Context, bootstrapPeers []peer.AddrInfo) []peer.AddrInfo {
+func (node *Node) getRelayedPeers(ctx context.Context, bootstrapPeers []peer.AddrInfo) []multiaddr.Multiaddr {
 
-	peerInfo := []peer.AddrInfo{}
+	peerInfo := []multiaddr.Multiaddr{}
 	for _, b := range bootstrapPeers {
 		stream, err := node.NewStream(ctx, b.ID, "/relay/peers")
 		if err != nil {
@@ -204,7 +204,9 @@ func (node *Node) getRelayedPeers(ctx context.Context, bootstrapPeers []peer.Add
 			if err != nil {
 				break
 			}
-			log.Println("Received peer info:", line)
+			log.Println("Received peer id:", line)
+			ma, _ := multiaddr.NewMultiaddr(line)
+			peerInfo = append(peerInfo, ma)
 		}
 	}
 
